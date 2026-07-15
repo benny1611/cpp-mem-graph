@@ -1,8 +1,13 @@
 import * as vscode from "vscode";
 import pidusage = require('pidusage');
+import { MemoryUpdatePayload } from "../shared/types";
 
 export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
+
     private activeTrackers: Map<string, NodeJS.Timeout> = new Map();
+
+    private _onDidUpdateMemory = new vscode.EventEmitter<MemoryUpdatePayload>();
+    public readonly ondidUpdateMemory = this._onDidUpdateMemory.event;
 
     constructor(private context: vscode.ExtensionContext) {
         this.registerListeners();
@@ -25,7 +30,6 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
         );
     }
 
-    // 3. This method is called automatically right before a debug session starts
     public createDebugAdapterTracker(session: vscode.DebugSession): vscode.ProviderResult<vscode.DebugAdapterTracker> {
         // Return an object that implements the Tracker interface
         return {
@@ -57,9 +61,15 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
                 const stats = await pidusage(pid);
                 const memoryMB = stats.memory / 1024 / 1024;
 
-                // TODO: Dispatch this data to your Webview using postMessage()
-                // Example: webviewPanel.webview.postMessage({ type: 'memory_update', value: memoryMB });
-                console.log(`[Memory Tracker] PID ${pid} Memory: ${memoryMB.toFixed(2)} MB`);
+                this._onDidUpdateMemory.fire({
+                    type: 'memory_update',
+                    timestamp: Date.now(),
+                    memoryMb: memoryMB,
+                    isRunning: true
+                });
+
+                console.log(`[Memory Tracker] Memory used: ${memoryMB}.`);
+
             } catch (error) {
                 // If the C++ program crashes or ends abruptly, pidusage will throw an error.
                 console.warn(`[Memory Tracker] Lost track of PID ${pid}. Stopping tracker.`, error);
@@ -78,6 +88,13 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
             
             // Clear pidusage internal cache to prevent memory leaks in the extension host
             pidusage.clear(); 
+
+            this._onDidUpdateMemory.fire({
+                type: 'memory_update',
+                timestamp: Date.now(),
+                memoryMb: 0,
+                isRunning: false
+            });
             
             console.log(`[Memory Tracker] Stopped tracking session: ${sessionId}`);
         }
