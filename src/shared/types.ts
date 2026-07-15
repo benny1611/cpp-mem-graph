@@ -8,3 +8,8 @@ export interface MemoryUpdatePayload {
 
 // You can add more types here later if the frontend needs to send messages BACK to the extension
 export type ExtensionMessage = MemoryUpdatePayload;
+
+// Data flowing Webview -> Extension
+export type WebviewMessage = 
+    | { type: 'set_update_interval'; ms: number }
+    | { type: 'set_auto_close'; value: boolean };

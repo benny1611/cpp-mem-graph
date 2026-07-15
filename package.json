@@ -1,7 +1,7 @@
 {
   "name": "cpp-mem-graph",
-  "displayName": "cpp-mem-graph",
-  "description": "A memory graph for C++ projects",
+  "displayName": "C/C++ Memory Graph",
+  "description": "A real-time memory graph for C and C++ projects",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.125.0"
@@ -11,14 +11,15 @@
   ],
   "activationEvents": [
     "onDebug",
-    "onLanguage:cpp"
+    "onLanguage:cpp",
+    "onLanguage:c"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "cpp-mem-graph.helloWorld",
-        "title": "Hello World"
+        "command": "cpp-mem-graph.showGraph",
+        "title": "Show C/C++ Memory Graph"
       }
     ]
   },

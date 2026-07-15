@@ -4,13 +4,27 @@ import { MemoryUpdatePayload } from "../shared/types";
 
 export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
 
-    private activeTrackers: Map<string, NodeJS.Timeout> = new Map();
+    private activeSessions: Map<string, {intervalId: NodeJS.Timeout, pid: number}> = new Map();
+    private currentIntervalMs: number = 1000;
 
     private _onDidUpdateMemory = new vscode.EventEmitter<MemoryUpdatePayload>();
     public readonly ondidUpdateMemory = this._onDidUpdateMemory.event;
 
     constructor(private context: vscode.ExtensionContext) {
         this.registerListeners();
+    }
+
+    public setUpdateInterval(ms: number) {
+        this.currentIntervalMs = ms;
+        console.log(`[Memory Tracker] Sampling rate updated to ${ms}ms`);
+
+        const sessionsToRestart = Array.from(this.activeSessions.entries());
+
+        for (const [sessionId, data] of sessionsToRestart) {
+            // FIX 2: Pass 'true' to let stopTracking know this is just a quick restart
+            this.stopTracking(sessionId, true);
+            this.startTracking(sessionId, data.pid);
+        }
     }
 
     private registerListeners() {
@@ -50,7 +64,7 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
 
     private startTracking(sessionId: string, pid: number) {
         // Prevent duplicate intervals
-        if (this.activeTrackers.has(sessionId)) {
+        if (this.activeSessions.has(sessionId)) {
             return;
         }
 
@@ -75,26 +89,29 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
                 console.warn(`[Memory Tracker] Lost track of PID ${pid}. Stopping tracker.`, error);
                 this.stopTracking(sessionId);
             }
-        }, 1000);
+        }, this.currentIntervalMs);
 
-        this.activeTrackers.set(sessionId, intervalId);
+        this.activeSessions.set(sessionId, {intervalId, pid});
     }
 
-    private stopTracking(sessionId: string) {
-        const intervalId = this.activeTrackers.get(sessionId);
-        if (intervalId) {
-            clearInterval(intervalId);
-            this.activeTrackers.delete(sessionId);
+    private stopTracking(sessionId: string, isRestarting: boolean = false) {
+        const sessionData = this.activeSessions.get(sessionId);
+        if (sessionData) {
+            clearInterval(sessionData.intervalId);
+            this.activeSessions.delete(sessionId);
             
             // Clear pidusage internal cache to prevent memory leaks in the extension host
             pidusage.clear(); 
 
-            this._onDidUpdateMemory.fire({
-                type: 'memory_update',
-                timestamp: Date.now(),
-                memoryMb: 0,
-                isRunning: false
-            });
+            // Only tell the frontend the process stopped if we aren't just restarting the timer
+            if (!isRestarting) {
+                this._onDidUpdateMemory.fire({
+                    type: 'memory_update',
+                    timestamp: Date.now(),
+                    memoryMb: 0,
+                    isRunning: false
+                });
+            }
             
             console.log(`[Memory Tracker] Stopped tracking session: ${sessionId}`);
         }
