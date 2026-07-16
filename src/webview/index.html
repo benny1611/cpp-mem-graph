@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' {{CSP_SOURCE}};">
+    
+    <title>Memory Graph</title>
+    <style>
+        body { font-family: var(--vscode-font-family); padding: 15px; color: var(--vscode-editor-foreground); }
+        .controls { margin-bottom: 20px; padding: 10px; background: var(--vscode-editor-inactiveSelectionBackground); border-radius: 4px; display: flex; align-items: center; gap: 15px; }
+        .chart-container { position: relative; height: 60vh; width: 100%; }
+        select, input { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); padding: 4px; }
+        h3 { margin-top: 0; }
+    </style>
+    
+    <script src="{{CHART_JS_URI}}"></script>
+</head>
+<body>
+    <div class="controls">
+        <label>
+            Sampling Rate:
+            <select id="sampleRate"></select>
+        </label>
+        <span>|</span>
+        <label>
+            <input type="checkbox" id="autoClose"> Close graph when debug ends
+        </label>
+    </div>
+
+    <h3 id="statusLabel">Status: Waiting for C/C++ Debug Session...</h3>
+    
+    <div class="chart-container">
+        <canvas id="memoryChart"></canvas>
+    </div>
+
+    <script>
+        window.VSCODE_CONFIG = {
+            initialRate: parseInt('{{INITIAL_RATE}}', 10),
+            initialAutoClose: '{{INITIAL_AUTO_CLOSE}}' === 'true'
+        };
+    </script>
+    
+    <script src="{{MAIN_JS_URI}}"></script>
+</body>
+</html>

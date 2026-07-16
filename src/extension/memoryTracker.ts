@@ -16,7 +16,7 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
 
     public setUpdateInterval(ms: number) {
         this.currentIntervalMs = ms;
-        console.log(`[Memory Tracker] Sampling rate updated to ${ms}ms`);
+        //console.log(`[Memory Tracker] Sampling rate updated to ${ms}ms`);
 
         const sessionsToRestart = Array.from(this.activeSessions.entries());
 
@@ -51,7 +51,7 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
             onDidSendMessage: (message: any) => {
                 // Look for the standard DAP 'process' event
                 if (message.type === 'event' && message.event === 'process') {
-                    console.log(`[Memory Tracker] Intercepted process event!!`, message);
+                    //console.log(`[Memory Tracker] Intercepted process event!!`, message);
                     
                     if (message.body && message.body.systemProcessId) {
                         const pid = message.body.systemProcessId;
@@ -68,7 +68,7 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
             return;
         }
 
-        console.log(`[Memory Tracker] Starting tracking for PID: ${pid}`);
+        //console.log(`[Memory Tracker] Starting tracking for PID: ${pid}`);
 
         const intervalId = setInterval(async () => {
             try {
@@ -82,11 +82,11 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
                     isRunning: true
                 });
 
-                console.log(`[Memory Tracker] Memory used: ${memoryMB}.`);
+                //console.log(`[Memory Tracker] Memory used: ${memoryMB}.`);
 
             } catch (error) {
                 // If the C++ program crashes or ends abruptly, pidusage will throw an error.
-                console.warn(`[Memory Tracker] Lost track of PID ${pid}. Stopping tracker.`, error);
+                //console.warn(`[Memory Tracker] Lost track of PID ${pid}. Stopping tracker.`, error);
                 this.stopTracking(sessionId);
             }
         }, this.currentIntervalMs);
@@ -113,7 +113,7 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
                 });
             }
             
-            console.log(`[Memory Tracker] Stopped tracking session: ${sessionId}`);
+            //console.log(`[Memory Tracker] Stopped tracking session: ${sessionId}`);
         }
     }
 }

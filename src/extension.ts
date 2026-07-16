@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { MemoryTracker } from './extension/memoryTracker';
 import { ExtensionMessage } from './shared/types';
 
@@ -28,6 +30,9 @@ export function activate(context: vscode.ExtensionContext) {
 				vscode.ViewColumn.Beside,
 				{
 					enableScripts: true,
+					localResourceRoots: [
+						vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')
+					]
 				}
 			);
 
@@ -38,7 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
 			memoryTracker.setUpdateInterval(savedRate);
 
 			//Load the HTML content
-			currentPanel.webview.html = getWebviewContent(savedRate, autoCloseEnabled);
+			currentPanel.webview.html = getWebviewContent(currentPanel, context, savedRate, autoCloseEnabled);
 
 			currentPanel.webview.onDidReceiveMessage(async (message) => {
 				if (message.type === 'set_update_interval') {
@@ -75,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.debug.onDidStartDebugSession((session) => {
             // Only pop open the graph if we are debugging C/C++
             if (session.type === 'cppdbg' || session.type === 'lldb-dap') {
-                console.log(`[Extension] Started ${session.type} debug session. Opening graph...`);
+                //console.log(`[Extension] Started ${session.type} debug session. Opening graph...`);
                 // Programmatically trigger the command we just registered above
                 vscode.commands.executeCommand('cpp-mem-graph.showGraph');
             }
@@ -85,62 +90,31 @@ export function activate(context: vscode.ExtensionContext) {
 
 
 // Temporary placeholder
-function getWebviewContent(initialRate: number, initialAutoClose: boolean) {
-    return `<!DOCTYPE html>
-				<html lang="en">
-				<head>
-					<meta charset="UTF-8">
-					<meta name="viewport" content="width=device-width, initial-scale=1.0">
-					<title>Memory Graph</title>
-					<style>
-						body { font-family: var(--vscode-font-family); padding: 10px; }
-						.controls { margin-bottom: 20px; padding: 10px; background: var(--vscode-editor-inactiveSelectionBackground); border-radius: 4px;}
-					</style>
-				</head>
-				<body>
-					<div class="controls">
-						<label>
-							Sampling Rate:
-							<select id="sampleRate">
-								<option value="100" ${initialRate === 100 ? 'selected' : ''}>100 ms (Fast)</option>
-								<option value="500" ${initialRate === 500 ? 'selected' : ''}>500 ms (Normal)</option>
-								<option value="1000" ${initialRate === 1000 ? 'selected' : ''}>1000 ms (Slow)</option>
-							</select>
-						</label>
-						&nbsp;&nbsp;|&nbsp;&nbsp;
-						<label>
-							<input type="checkbox" id="autoClose" ${initialAutoClose ? 'checked' : ''}> Close graph when debug ends
-						</label>
-					</div>
+function getWebviewContent(panel: vscode.WebviewPanel,
+						   context: vscode.ExtensionContext,
+						   initialRate: number,
+						   initialAutoClose: boolean) : string {
+	// Helper function to resolve paths directly to webview-ready local URIs
+    const getWebviewUri = (fileName: string) => {
+        const diskPath = vscode.Uri.joinPath(context.extensionUri, 'src', 'webview', fileName);
+        return panel.webview.asWebviewUri(diskPath);
+    };
+	const chartJsUri = getWebviewUri('chart.umd.min.js');
+    const mainJsUri = getWebviewUri('main.js');
 
-					<h1 id="memoryLabel">Waiting for C++ Debug Session...</h1>
+	// Load the template layout file from disk
+    const htmlFilePath = path.join(context.extensionPath, 'src', 'webview', 'index.html');
+    let htmlContent = fs.readFileSync(htmlFilePath, 'utf8');
 
-					<script>
-						const vscode = acquireVsCodeApi();
+	// Swap configuration values and security headers into placeholders
+    htmlContent = htmlContent
+        .replace(/{{CSP_SOURCE}}/g, panel.webview.cspSource)
+        .replace('{{CHART_JS_URI}}', chartJsUri.toString())
+        .replace('{{MAIN_JS_URI}}', mainJsUri.toString())
+        .replace('{{INITIAL_RATE}}', initialRate.toString())
+        .replace('{{INITIAL_AUTO_CLOSE}}', initialAutoClose.toString());
 
-						document.getElementById('sampleRate').addEventListener('change', (e) => {
-							const ms = parseInt(e.target.value, 10);
-							vscode.postMessage({ type: 'set_update_interval', ms: ms });
-						});
-
-						document.getElementById('autoClose').addEventListener('change', (e) => {
-							vscode.postMessage({ type: 'set_auto_close', value: e.target.checked });
-						});
-
-						window.addEventListener('message', event => {
-							const message = event.data; 
-							if (message.type === 'memory_update') {
-								const label = document.getElementById('memoryLabel');
-								if (message.isRunning) {
-									label.innerText = 'Memory: ' + message.memoryMb.toFixed(2) + ' MB';
-								} else {
-									label.innerText = 'Process Stopped.';
-								}
-							}
-						});
-					</script>
-				</body>
-			</html>`;
+	return htmlContent;
 }
 
 // This method is called when your extension is deactivated
