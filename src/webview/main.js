@@ -19,7 +19,7 @@ rates.forEach(r => {
     const opt = document.createElement('option');
     opt.value = r.val;
     opt.textContent = r.label;
-    if (r.val === currentRate) opt.selected = true;
+    if (r.val === currentRate) {opt.selected = true;}
     sampleRateDropdown.appendChild(opt);
 });
 autoCloseCheckbox.checked = autoCloseEnabled;
