@@ -1,71 +1,101 @@
-# cpp-mem-graph README
+# C/C++ Memory Graph for VS Code
 
-This is the README for your extension "cpp-mem-graph". After writing up a brief description, we recommend including the following sections.
+Bring the powerful, real-time memory profiling graphs of **Visual Studio** directly into your **Visual Studio Code** environment. Designed specifically for C/C++ developers who want an instantaneous, zero-configuration diagnostic tool to detect memory leaks and monitor footprint trends during active debug sessions.
 
-## Features
+Works flawlessly on **ZorinOS / Linux**, **macOS**, and **Windows**.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## 📸 Preview
 
-For example if there is an image subfolder under your extension project workspace:
+*Featuring a sleek, theme-adaptive dark UI, precise point-hover columns, customizable sampling, and automated panel lifecycle controls.*
 
-\!\[feature X\]\(images/feature-x.png\)
+## 🌟 Key Features
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+* **Instantaneous Feedback:** Catch memory leaks visually *the second they occur* by watching your heap slope over time instead of waiting to run a heavy external profiler.
 
-## Requirements
+* **True Cross-Platform Support:** Relies on robust, platform-native metrics abstracted elegantly for Linux, macOS, and Windows.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+* **Zero Configuration Integration:** Automatically pops open alongside your code editor the moment you launch a C++ debug session.
 
-## Extension Settings
+* **High-Performance Rendering:** Uses `Chart.js` for extremely efficient rendering that keeps resource overhead minimal, leaving your machine's power dedicated to compiling and running your code.
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+* **Theme-Adaptive Aesthetics:** Automatically detects your active VS Code color palette to draw grid lines, labels, and legends that match your workspace perfectly.
 
-For example:
+* **Customizable Sampling Rates:** Toggle between Fast (100ms), Normal (500ms), and Slow (1000ms) intervals on-the-fly to adapt to your debugging depth.
 
-This extension contributes the following settings:
+* **Smart Lifespans:** Optional "Close graph when debug ends" setting to clean up your workspace automatically when the process terminates.
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## 🛠 Supported Debuggers
 
-## Known Issues
+The extension dynamically intercepts the Debug Adapter Protocol (DAP) process events. Out of the box, it supports the leading C++ debugging frameworks:
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+* **Microsoft C/C++ extension** (`cppdbg`)
 
-## Release Notes
+* **CodeLLDB / LLDB-DAP** (`lldb-dap`)
 
-Users appreciate release notes as you update your extension.
+## 🏗 Architecture & Separation of Concerns
 
-### 1.0.0
+This extension was designed with robust architectural boundaries to prevent memory leaks in the IDE and ensure snappy UI rendering:
+```
+┌────────────────────────────────────────────────────────┐
+│             Extension Host (Node.js/Backend)           │
+│  - Listens to Debug Adapter (DAP) Events               │
+│  - Hooks OS Process ID (PID) via 'pidusage'            │
+│  - Manages Polling Intervals                           │
+└─────────────────────────┬──────────────────────────────┘
+│ (Secure Webview postMessage IPC)
+▼
+┌────────────────────────────────────────────────────────┐
+│            Isolated Frontend Webview (HTML5)           │
+│  - Completely sandboxed from OS/Filesystem             │
+│  - Renders UI controls & reactive state                │
+│  - Plots metrics using Chart.js on Canvas              │
+└────────────────────────────────────────────────────────┘
+```
+## 🚀 Getting Started (Development Mode)
 
-Initial release of ...
+If you are building the extension from source, follow these quick steps:
 
-### 1.0.1
+### Prerequisites
 
-Fixed issue #.
+* [Node.js](https://nodejs.org/) installed on your machine.
 
-### 1.1.0
+* A C++ compiler setup (GCC on ZorinOS/Linux, Clang on macOS, MSVC on Windows).
 
-Added features X, Y, and Z.
+### Setup and Running
 
----
+1. Clone this repository to your local workspace:
+```
+git clone https://github.com/your-username/cpp-mem-graph.git
+cd cpp-mem-graph
+```
 
-## Following extension guidelines
+2. Install dependencies:
+```
+npm install
+```
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+3. Open the project in VS Code:
+```
+code .
+```
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+4. Press `F5` to open a new **Extension Development Host** window.
 
-## Working with Markdown
+5. In the new window, open any C/C++ workspace and start debugging your application (`F5`). The **C/C++ Memory Graph** panel will slide open right beside your editor!
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+## ⚙ How to Use
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+1. **Auto-Launch:** Simply start your standard C/C++ debug configuration. The tool detects the program start and triggers automatically.
 
-## For more information
+2. **Manual Launch:** You can also trigger the graph manually at any time using the Command Palette:
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+* Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS)
 
-**Enjoy!**
+* Run the command: `C/C++ Memory Graph: Show Graph`
+
+3. **Customize Sampling:** Change how frequently the process memory is polled by using the **Sampling Rate** dropdown at the top. The extension remembers your preferred selection across sessions!
+
+4. **Auto-Cleanup:** Check **Close graph when debug ends** to automatically tear down the visualizer when your target program exits.
+
+## 📄 License
+This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
