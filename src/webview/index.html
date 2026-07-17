@@ -3,18 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline' {{CSP_SOURCE}};">
-    
     <title>Memory Graph</title>
     <style>
         body { font-family: var(--vscode-font-family); padding: 15px; color: var(--vscode-editor-foreground); }
         .controls { margin-bottom: 20px; padding: 10px; background: var(--vscode-editor-inactiveSelectionBackground); border-radius: 4px; display: flex; align-items: center; gap: 15px; }
-        .chart-container { position: relative; height: 60vh; width: 100%; }
+        
+        .chart-container { 
+            position: relative; 
+            height: 60vh; 
+            max-height: 450px; 
+            width: 100%;
+            max-width: 900px; 
+            border: 1px solid var(--vscode-panel-border, #444);
+            border-radius: 6px;
+            overflow: hidden;
+            background-color: var(--vscode-editor-background);
+        }
+        
+        /* FIX 2: Removed the blur, added a subtle dark/light tint */
+        .chart-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(128, 128, 128, 0.15); /* Very light transparent tint */
+            display: none; /* Hidden by default */
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        /* Added a badge style for the Paused text so it pops over the grid lines */
+        .pause-badge {
+            background-color: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 8px 24px;
+            border-radius: 20px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
         select, input { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); padding: 4px; }
         h3 { margin-top: 0; }
     </style>
-    
     <script src="{{CHART_JS_URI}}"></script>
 </head>
 <body>
@@ -32,6 +63,10 @@
     <h3 id="statusLabel">Status: Waiting for C/C++ Debug Session...</h3>
     
     <div class="chart-container">
+        <!-- New Overlay Div with Badge -->
+        <div id="pauseOverlay" class="chart-overlay">
+            <span class="pause-badge">Paused</span>
+        </div>
         <canvas id="memoryChart"></canvas>
     </div>
 
@@ -41,7 +76,6 @@
             initialAutoClose: '{{INITIAL_AUTO_CLOSE}}' === 'true'
         };
     </script>
-    
     <script src="{{MAIN_JS_URI}}"></script>
 </body>
 </html>

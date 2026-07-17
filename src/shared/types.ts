@@ -3,6 +3,8 @@ export interface MemoryUpdatePayload {
     timestamp: number;
     memoryMb: number;
     isRunning?: boolean;
+    isPaused?: boolean;
+    isStateChange?: boolean;
     sampleRate?: number;
 }
 

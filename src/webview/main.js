@@ -1,14 +1,14 @@
 const vscode = acquireVsCodeApi();
 
-// Grab config passed from the backend
 let currentRate = window.VSCODE_CONFIG.initialRate;
 let autoCloseEnabled = window.VSCODE_CONFIG.initialAutoClose;
 let sessionStartTime = null;
+let pauseStartTime = null; // Used to track time offset while paused
 const TIME_WINDOW_MS = 60000; 
 
-// Setup initial DOM states
 const sampleRateDropdown = document.getElementById('sampleRate');
 const autoCloseCheckbox = document.getElementById('autoClose');
+const pauseOverlay = document.getElementById('pauseOverlay');
 
 const rates = [
     { val: 100, label: "100 ms (Fast)" },
@@ -24,12 +24,12 @@ rates.forEach(r => {
 });
 autoCloseCheckbox.checked = autoCloseEnabled;
 
-// Theme Detection
 const textColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-editor-foreground').trim() || '#ccc';
 const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-editorLineNumber-foreground').trim() || '#444';
 
-// Initialize Chart
 const ctx = document.getElementById('memoryChart').getContext('2d');
+
+// Restored Chart.js Configuration
 const memoryChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -40,8 +40,8 @@ const memoryChart = new Chart(ctx, {
             borderColor: '#007acc',
             backgroundColor: 'rgba(0, 122, 204, 0.2)',
             borderWidth: 2,
-            pointRadius: 0,        // Keeps it lean during normal drawing
-            pointHoverRadius: 5,   // Dynamically pops a 5px dot into view on hover!
+            pointRadius: 0,
+            pointHoverRadius: 5,
             fill: true,
             tension: 0.3
         }]
@@ -50,29 +50,23 @@ const memoryChart = new Chart(ctx, {
         responsive: true,
         maintainAspectRatio: false,
         animation: false,
-        
-        // 1. CAPTURE HOVERS ANYWHERE ALONG THE X-AXIS
         interaction: {
-            intersect: false, // True hover intersection is off; mouse doesn't need to touch the line
-            mode: 'index'     // Snaps cleanly to the nearest timestamp column index
+            intersect: false, 
+            mode: 'index'     
         },
-        
         plugins: { 
             legend: { labels: { color: textColor } },
-            
-            // 2. STYLIZE THE TOOLTIP TO MATCH VS CODE
             tooltip: {
                 enabled: true,
-                backgroundColor: 'rgba(30, 30, 30, 0.95)', // Sleek dark panel vibe
+                backgroundColor: 'rgba(30, 30, 30, 0.95)',
                 titleColor: '#ffffff',
                 bodyColor: '#007acc',
                 borderColor: gridColor,
                 borderWidth: 1,
-                displayColors: false, // Hides the useless generic square color box
+                displayColors: false,
                 padding: 10,
                 callbacks: {
                     label: function(context) {
-                        // Formats the hover value to explicitly read "Memory: XX.XX MB"
                         return `Memory: ${parseFloat(context.parsed.y).toFixed(2)} MB`;
                     }
                 }
@@ -85,47 +79,69 @@ const memoryChart = new Chart(ctx, {
     }
 });
 
-// Event Listeners
 sampleRateDropdown.addEventListener('change', (e) => {
     currentRate = parseInt(e.target.value, 10);
     vscode.postMessage({ type: 'set_update_interval', ms: currentRate });
 });
-
 autoCloseCheckbox.addEventListener('change', (e) => {
     vscode.postMessage({ type: 'set_auto_close', value: e.target.checked });
 });
 
-// Message Interception
 window.addEventListener('message', event => {
     const message = event.data; 
     if (message.type === 'memory_update') {
         const statusLabel = document.getElementById('statusLabel');
         
         if (message.isRunning) {
-            statusLabel.innerText = 'Status: Profiling process...';
             
-            // If this is the first data point of the session, lock in the start time
-            if (!sessionStartTime) {
-                sessionStartTime = message.timestamp;
-            }
-            
-            // Calculate delta seconds safely
-            const secondsElapsed = Math.floor((message.timestamp - sessionStartTime) / 1000);
-            
-            memoryChart.data.labels.push(`${secondsElapsed}s`);
-            memoryChart.data.datasets[0].data.push(message.memoryMb);
+            if (message.isPaused) {
+                // HANDLE HALT (Breakpoint)
+                statusLabel.innerText = 'Status: Paused (Breakpoint)...';
+                pauseOverlay.style.display = 'flex';
+                if (!pauseStartTime) {
+                    pauseStartTime = message.timestamp;
+                }
+            } else {
+                // HANDLE RUNNING / RESUMING
+                statusLabel.innerText = 'Status: Profiling process...';
+                pauseOverlay.style.display = 'none';
+                
+                // If we are un-pausing, we mathematically shift our session start time 
+                // so the X-axis of the graph doesn't jump forward by a big gap.
+                if (pauseStartTime) {
+                    sessionStartTime += (message.timestamp - pauseStartTime);
+                    pauseStartTime = null;
+                }
 
-            const maxDataPoints = Math.floor(TIME_WINDOW_MS / currentRate);
-            while (memoryChart.data.labels.length > maxDataPoints) {
-                memoryChart.data.labels.shift();
-                memoryChart.data.datasets[0].data.shift();
+                // Clear arrays ONLY if this is a brand new debugging session
+                if (!sessionStartTime) {
+                    sessionStartTime = message.timestamp;
+                    memoryChart.data.labels = [];
+                    memoryChart.data.datasets[0].data = [];
+                }
+                
+                // Only graph real data (skip dummy state-change messages)
+                if (!message.isStateChange) {
+                    const secondsElapsed = Math.floor((message.timestamp - sessionStartTime) / 1000);
+                    
+                    memoryChart.data.labels.push(`${secondsElapsed}s`);
+                    memoryChart.data.datasets[0].data.push(message.memoryMb);
+
+                    const maxDataPoints = Math.floor(TIME_WINDOW_MS / currentRate);
+                    while (memoryChart.data.labels.length > maxDataPoints) {
+                        memoryChart.data.labels.shift();
+                        memoryChart.data.datasets[0].data.shift();
+                    }
+                    memoryChart.update('none');
+                }
             }
-            memoryChart.update('none');
         } else {
+            // DO NOT empty the chart array here! 
+            // Just clear the timestamps. The chart data stays visible until un-paused.
             statusLabel.innerText = 'Status: Process Stopped.';
-            
-            // Reset the start time so the next debug session starts fresh at 0s
+            pauseOverlay.style.display = 'none';
             sessionStartTime = null; 
+            pauseStartTime = null;
         }
     }
 });

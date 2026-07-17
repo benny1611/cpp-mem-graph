@@ -13,28 +13,29 @@ export function activate(context: vscode.ExtensionContext) {
 	
 	// Command to open the memory graph
 	const startGraphCommand = vscode.commands.registerCommand('cpp-mem-graph.showGraph', () => {
-		const columnToShowIn = vscode.window.activeTextEditor
-			? vscode.window.activeTextEditor.viewColumn
-			: undefined;
+        
+        // If we already have a panel, reveal it in its EXISTING column, 
+        // and set preserveFocus to true so it doesn't steal focus from your code.
+        if (currentPanel) {
+            currentPanel.reveal(currentPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
+            return;
+        }
 
-			// If we already have a panel, show it
-			if (currentPanel) {
-				currentPanel.reveal(columnToShowIn);
-				return;
-			}
-
-			// Otherwise, create a new panel
-			currentPanel = vscode.window.createWebviewPanel(
-				'cppMemGraph',
-				'C/C++ Memory Graph',
-				vscode.ViewColumn.Beside,
-				{
-					enableScripts: true,
-					localResourceRoots: [
-						vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')
-					]
-				}
-			);
+        // Otherwise, create a new panel
+        currentPanel = vscode.window.createWebviewPanel(
+            'cppMemGraph',
+            'C/C++ Memory Graph',
+            { 
+                viewColumn: vscode.ViewColumn.Beside, 
+                preserveFocus: true // Don't steal focus on first launch either
+            },
+            {
+                enableScripts: true,
+                localResourceRoots: [
+                    vscode.Uri.joinPath(context.extensionUri, 'src', 'webview')
+                ]
+            }
+        );
 
 			// Get the saved values from VS Code, or use defaults (1000ms and false) if they don't exist yet
 			const savedRate = context.globalState.get<number>('cppMemGraph.sampleRate', 1000);

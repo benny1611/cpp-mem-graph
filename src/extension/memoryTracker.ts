@@ -4,7 +4,7 @@ import { MemoryUpdatePayload } from "../shared/types";
 
 export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
 
-    private activeSessions: Map<string, {intervalId: NodeJS.Timeout, pid: number}> = new Map();
+    private activeSessions: Map<string, {intervalId: NodeJS.Timeout | undefined, pid: number}> = new Map();
     private currentIntervalMs: number = 1000;
 
     private _onDidUpdateMemory = new vscode.EventEmitter<MemoryUpdatePayload>();
@@ -16,19 +16,16 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
 
     public setUpdateInterval(ms: number) {
         this.currentIntervalMs = ms;
-        //console.log(`[Memory Tracker] Sampling rate updated to ${ms}ms`);
-
-        const sessionsToRestart = Array.from(this.activeSessions.entries());
-
-        for (const [sessionId, data] of sessionsToRestart) {
-            // FIX 2: Pass 'true' to let stopTracking know this is just a quick restart
-            this.stopTracking(sessionId, true);
-            this.startTracking(sessionId, data.pid);
+        for (const [sessionId, data] of this.activeSessions.entries()) {
+            if (data.intervalId) {
+                clearInterval(data.intervalId);
+                this.startTracking(sessionId, data.pid);
+            }
         }
     }
 
     private registerListeners() {
-        // 1. Register this class as a Tracker Factory for our specific debuggers
+        // Register this class as a Tracker Factory for our specific debuggers
         this.context.subscriptions.push(
             vscode.debug.registerDebugAdapterTrackerFactory('cppdbg', this)
         );
@@ -36,7 +33,7 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
             vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', this)
         );
 
-        // 2. We still use this standard API to clean up when the session ends
+        // We still use this standard API to clean up when the session ends
         this.context.subscriptions.push(
             vscode.debug.onDidTerminateDebugSession(session => {
                 this.stopTracking(session.id);
@@ -50,12 +47,14 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
             // Intercept messages sent FROM the Debug Adapter TO VS Code
             onDidSendMessage: (message: any) => {
                 // Look for the standard DAP 'process' event
-                if (message.type === 'event' && message.event === 'process') {
-                    //console.log(`[Memory Tracker] Intercepted process event!!`, message);
-                    
-                    if (message.body && message.body.systemProcessId) {
+                if (message.type === 'event') {
+                    if (message.event === 'process' && message.body?.systemProcessId) {
                         const pid = message.body.systemProcessId;
                         this.startTracking(session.id, pid);
+                    } else if (message.event === 'stopped') {
+                        this.pauseTracking(session.id); // Halts polling on breakpoints
+                    } else if (message.event === 'continued') {
+                        this.resumeTracking(session.id); // Resumes polling on continue
                     }
                 }
             }
@@ -63,14 +62,23 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
     }
 
     private startTracking(sessionId: string, pid: number) {
-        // Prevent duplicate intervals
-        if (this.activeSessions.has(sessionId)) {
+        if (this.activeSessions.has(sessionId)) return;
+        
+        this.activeSessions.set(sessionId, {intervalId: undefined, pid});
+        this.startTrackingInterval(sessionId, pid);
+    }
+
+    private startTrackingInterval(sessionId: string, pid: number) {
+        const data = this.activeSessions.get(sessionId);
+        if (!data) {
             return;
         }
+        
+        if (data.intervalId) {
+            clearInterval(data.intervalId);
+        }
 
-        //console.log(`[Memory Tracker] Starting tracking for PID: ${pid}`);
-
-        const intervalId = setInterval(async () => {
+        data.intervalId = setInterval(async () => {
             try {
                 const stats = await pidusage(pid);
                 const memoryMB = stats.memory / 1024 / 1024;
@@ -79,41 +87,56 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
                     type: 'memory_update',
                     timestamp: Date.now(),
                     memoryMb: memoryMB,
-                    isRunning: true
+                    isRunning: true,
+                    isPaused: false
                 });
 
-                //console.log(`[Memory Tracker] Memory used: ${memoryMB}.`);
-
             } catch (error) {
-                // If the C++ program crashes or ends abruptly, pidusage will throw an error.
-                //console.warn(`[Memory Tracker] Lost track of PID ${pid}. Stopping tracker.`, error);
                 this.stopTracking(sessionId);
             }
         }, this.currentIntervalMs);
-
-        this.activeSessions.set(sessionId, {intervalId, pid});
     }
 
-    private stopTracking(sessionId: string, isRestarting: boolean = false) {
+    private pauseTracking(sessionId: string) {
+        const data = this.activeSessions.get(sessionId);
+        if (data && data.intervalId) {
+            clearInterval(data.intervalId);
+            data.intervalId = undefined; // Mark as paused
+            
+            // Notify frontend about the state change
+            this._onDidUpdateMemory.fire({
+                type: 'memory_update', timestamp: Date.now(), memoryMb: 0, 
+                isRunning: true, isPaused: true, isStateChange: true
+            });
+        }
+    }
+
+    private resumeTracking(sessionId: string) {
+        const data = this.activeSessions.get(sessionId);
+        if (data && !data.intervalId) {
+            this.startTrackingInterval(sessionId, data.pid);
+            
+            // Notify frontend
+            this._onDidUpdateMemory.fire({
+                type: 'memory_update', timestamp: Date.now(), memoryMb: 0, 
+                isRunning: true, isPaused: false, isStateChange: true
+            });
+        }
+    }
+
+    private stopTracking(sessionId: string) {
         const sessionData = this.activeSessions.get(sessionId);
         if (sessionData) {
-            clearInterval(sessionData.intervalId);
+            if (sessionData.intervalId) {
+                clearInterval(sessionData.intervalId);
+            }
             this.activeSessions.delete(sessionId);
-            
-            // Clear pidusage internal cache to prevent memory leaks in the extension host
             pidusage.clear(); 
 
-            // Only tell the frontend the process stopped if we aren't just restarting the timer
-            if (!isRestarting) {
-                this._onDidUpdateMemory.fire({
-                    type: 'memory_update',
-                    timestamp: Date.now(),
-                    memoryMb: 0,
-                    isRunning: false
-                });
-            }
-            
-            //console.log(`[Memory Tracker] Stopped tracking session: ${sessionId}`);
+            this._onDidUpdateMemory.fire({
+                type: 'memory_update', timestamp: Date.now(), memoryMb: 0, 
+                isRunning: false, isStateChange: true
+            });
         }
     }
 }
