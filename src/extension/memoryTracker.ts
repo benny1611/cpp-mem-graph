@@ -62,7 +62,9 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
     }
 
     private startTracking(sessionId: string, pid: number) {
-        if (this.activeSessions.has(sessionId)) return;
+        if (this.activeSessions.has(sessionId)) {
+            return;
+        }
         
         this.activeSessions.set(sessionId, {intervalId: undefined, pid});
         this.startTrackingInterval(sessionId, pid);
