@@ -7,6 +7,7 @@ Works flawlessly on **ZorinOS / Linux**, **macOS**, and **Windows**.
 ## 📸 Preview
 
 *Featuring a sleek, theme-adaptive dark UI, precise point-hover columns, customizable sampling, and automated panel lifecycle controls.*
+![Project Demo](assets/demo.gif)
 
 ## 🌟 Key Features
 
