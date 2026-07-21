@@ -25,15 +25,15 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
     }
 
     private registerListeners() {
-        // Register this class as a Tracker Factory for our specific debuggers
-        this.context.subscriptions.push(
-            vscode.debug.registerDebugAdapterTrackerFactory('cppdbg', this)
-        );
-        this.context.subscriptions.push(
-            vscode.debug.registerDebugAdapterTrackerFactory('lldb-dap', this)
-        );
+        // Register tracker factories for GDB/LLDB as well as Visual Studio Windows Debugger (cppvsdbg)
+        const debugTypes = ['cppdbg', 'lldb-dap', 'cppvsdbg'];
+        
+        for (const type of debugTypes) {
+            this.context.subscriptions.push(
+                vscode.debug.registerDebugAdapterTrackerFactory(type, this)
+            );
+        }
 
-        // We still use this standard API to clean up when the session ends
         this.context.subscriptions.push(
             vscode.debug.onDidTerminateDebugSession(session => {
                 this.stopTracking(session.id);
@@ -42,19 +42,16 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
     }
 
     public createDebugAdapterTracker(session: vscode.DebugSession): vscode.ProviderResult<vscode.DebugAdapterTracker> {
-        // Return an object that implements the Tracker interface
         return {
-            // Intercept messages sent FROM the Debug Adapter TO VS Code
             onDidSendMessage: (message: any) => {
-                // Look for the standard DAP 'process' event
                 if (message.type === 'event') {
                     if (message.event === 'process' && message.body?.systemProcessId) {
                         const pid = message.body.systemProcessId;
                         this.startTracking(session.id, pid);
                     } else if (message.event === 'stopped') {
-                        this.pauseTracking(session.id); // Halts polling on breakpoints
+                        this.pauseTracking(session.id);
                     } else if (message.event === 'continued') {
-                        this.resumeTracking(session.id); // Resumes polling on continue
+                        this.resumeTracking(session.id);
                     }
                 }
             }
@@ -80,9 +77,13 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
             clearInterval(data.intervalId);
         }
 
+        let consecutiveErrors = 0;
+
         data.intervalId = setInterval(async () => {
             try {
                 const stats = await pidusage(pid);
+                consecutiveErrors = 0; // Reset error count on success
+
                 const memoryMB = stats.memory / 1024 / 1024;
 
                 this._onDidUpdateMemory.fire({
@@ -94,7 +95,13 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
                 });
 
             } catch (error) {
-                this.stopTracking(sessionId);
+                console.error(`[MemoryTracker] Warning: Failed to query stats for PID ${pid}:`, error);
+                consecutiveErrors++;
+
+                // Only stop tracking if it fails 5 times in a row (e.g. process actually died)
+                if (consecutiveErrors > 5) {
+                    this.stopTracking(sessionId);
+                }
             }
         }, this.currentIntervalMs);
     }
@@ -103,9 +110,8 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
         const data = this.activeSessions.get(sessionId);
         if (data && data.intervalId) {
             clearInterval(data.intervalId);
-            data.intervalId = undefined; // Mark as paused
+            data.intervalId = undefined;
             
-            // Notify frontend about the state change
             this._onDidUpdateMemory.fire({
                 type: 'memory_update', timestamp: Date.now(), memoryMb: 0, 
                 isRunning: true, isPaused: true, isStateChange: true
@@ -118,7 +124,6 @@ export class MemoryTracker implements vscode.DebugAdapterTrackerFactory {
         if (data && !data.intervalId) {
             this.startTrackingInterval(sessionId, data.pid);
             
-            // Notify frontend
             this._onDidUpdateMemory.fire({
                 type: 'memory_update', timestamp: Date.now(), memoryMb: 0, 
                 isRunning: true, isPaused: false, isStateChange: true

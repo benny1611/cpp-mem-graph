@@ -2,7 +2,7 @@
   "name": "cpp-mem-graph",
   "displayName": "C/C++ Memory Graph",
   "description": "A real-time memory graph for C and C++ projects",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publisher": "benny1611",
   "icon": "icon.png",
   "repository": {
@@ -50,7 +50,7 @@
     "test": "vscode-test"
   },
   "dependencies": {
-    "pidusage": "^3.0.2"
+    "pidusage": "^4.0.1"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",

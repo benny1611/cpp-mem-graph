@@ -16,3 +16,7 @@
 ## [0.0.4]
 
 - Fixed bug when changing the sampling rate
+
+## [0.0.5]
+
+- Fixed bug for windows support
